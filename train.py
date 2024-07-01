@@ -6,7 +6,7 @@ import torch
 import torch.backends.cudnn as cudnn
 
 from models.HiFormer import HiFormer
-import configs.HiFormer_configs as configs 
+import configs.HiFormer_configs as configs
 from trainer import trainer
 
 
@@ -66,7 +66,6 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-
     CONFIGS = {
         'hiformer-s': configs.get_hiformer_s_configs(),
         'hiformer-b': configs.get_hiformer_b_configs(),
@@ -76,6 +75,7 @@ if __name__ == "__main__":
     if args.batch_size != 24 and args.batch_size % 6 == 0:
         args.base_lr *= args.batch_size / 24
 
-
-    model = HiFormer(config=CONFIGS[args.model_name], img_size=args.img_size, n_classes=args.num_classes).cuda()
+    model = HiFormer(config=CONFIGS[args.model_name],
+                     img_size=args.img_size, n_classes=args.num_classes)
+    model = torch.nn.DataParallel(model, device_ids=[0, 1]).cuda()
     trainer(args, model, args.output_dir)
