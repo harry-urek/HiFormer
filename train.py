@@ -49,7 +49,7 @@ parser.add_argument('--z_spacing', type=int,
 
 args = parser.parse_args()
 
-args.output_dir = args.output_dir + f'/{args.model_name}'
+args.output_dir = f'{args.output_dir}/{args.model_name}'
 os.makedirs(args.output_dir, exist_ok=True)
 
 
@@ -76,6 +76,6 @@ if __name__ == "__main__":
         args.base_lr *= args.batch_size / 24
 
     model = HiFormer(config=CONFIGS[args.model_name],
-                     img_size=args.img_size, n_classes=args.num_classes)
-    model = torch.nn.DataParallel(model, device_ids=[0, 1]).cuda()
+                     img_size=args.img_size, n_classes=args.num_classes).cuda()
+    # model = torch.nn.DataParallel(model, device_ids=[0, 1]).cuda()
     trainer(args, model, args.output_dir)
