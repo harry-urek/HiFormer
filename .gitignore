@@ -6,10 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
-# Distribution / packaging
+# CACHE AND RESULT FILES
+results/
 data/
 data.zip
 .Python
+
+# Distribution / packaging
 build/
 Segmentation/output/*
 develop-eggs/
