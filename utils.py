@@ -706,14 +706,6 @@ def get_latest_checkpoint(snap_path, model_name):
 
     logging.info(f"Looking for checkpoints in: {snap_path}")
 
-    # List files in the directory
-    try:
-        files = os.listdir(snap_path)
-        logging.info(f"Files in directory: {files}")
-    except FileNotFoundError:
-        logging.error(f"Directory not found: {snap_path}")
-        return None
-
     for filename in os.listdir(snap_path):
         match = path_pattern.match(filename)
         if match:

@@ -139,7 +139,7 @@ def trainer(args, model, snapshot_path):
         len(trainloader), max_iterations))
 
     best_performance = 0.0
-    iterator = tqdm(range(max_epoch), ncols=70)
+    iterator = tqdm(range(start_epoch, max_epoch), ncols=70)
     dice_ = []
     hd95_ = []
 
