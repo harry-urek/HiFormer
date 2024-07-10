@@ -10,27 +10,41 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, factor, heads = 8, dim_head = 64, dropout = 0.):
+    def __init__(self, dim, factor, heads=8, dim_head=64, dropout=0.):
         super().__init__()
-        inner_dim = dim_head *  heads
+        inner_dim = dim_head * heads
         project_out = not (heads == 1 and dim_head == dim)
 
         self.heads = heads
         self.scale = dim_head ** -0.5
 
-        self.attend = nn.Softmax(dim = -1)
+        self.attend = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
 
-        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
+        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
 
         self.to_out = nn.Sequential(
             nn.Linear(inner_dim, dim * factor),
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
+    # Attention Module :
+
+        # Tensor 'x' gets split in to 3 chunk of size d/3 & assigned as 3 tuples too qkv
+        # then Query q , Key k & Value v are assigned by rearranging them for multi headed attention
+        # With q,k,v with dims of [b, h, n, d]
+        # b -> batch size , n -> sequence length , h -> no of heads , d -> dimension per head
+        # Tensor t(qkv) gets reshaped from '[b, n, (h d)] -> [b, h, n, d]'
+        # Dot prod of query and Key (getting the similarity) getting normalized by scaling it by h^-0.5
+        # Softmax to get weights as res of dot to make sure summation of weights is 1
+        # Dropout to make low values zero
+        # Weighted Sum as result is created by applying attn and v tensor
+        # Then res is reshaped back to [b,n,(h,d)] and then linearly transformed
+
     def forward(self, x):
-        qkv = self.to_qkv(x).chunk(3, dim = -1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv)
+        qkv = self.to_qkv(x).chunk(3, dim=-1)
+        q, k, v = map(lambda t: rearrange(
+            t, 'b n (h d) -> b h n d', h=self.heads), qkv)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
@@ -48,12 +62,16 @@ class SwinTransformer(nn.Module):
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True, **kwargs):
-        
+
         super().__init__()
-        
+
+        # Initialization
+        #   compute patch_resolution and no_patches
+        #
+
         patches_resolution = [img_size // patch_size, img_size // patch_size]
         num_patches = patches_resolution[0] * patches_resolution[1]
-        
+
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.ape = ape
@@ -61,18 +79,21 @@ class SwinTransformer(nn.Module):
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
         self.mlp_ratio = mlp_ratio
 
-
+        # If self.ape is True trunc_normal_self. absolute_pos_embed is True trunc_normal_self. absolute_pos_embed std. 02
         if self.ape:
-            self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
+            self.absolute_pos_embed = nn.Parameter(
+                torch.zeros(1, num_patches, embed_dim))
             trunc_normal_(self.absolute_pos_embed, std=.02)
 
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         # stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate,
+                                                sum(depths))]  # stochastic depth decay rule
 
         # build layers
         self.layers = nn.ModuleList()
+        # Add a basic layer to the list of layers.
         for i_layer in range(self.num_layers):
             layer = BasicLayer(dim=int(embed_dim * 2 ** i_layer),
                                input_resolution=(patches_resolution[0] // (2 ** i_layer),
@@ -83,7 +104,8 @@ class SwinTransformer(nn.Module):
                                mlp_ratio=self.mlp_ratio,
                                qkv_bias=qkv_bias, qk_scale=qk_scale,
                                drop=drop_rate, attn_drop=attn_drop_rate,
-                               drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
+                               drop_path=dpr[sum(depths[:i_layer]):sum(
+                                   depths[:i_layer + 1])],
                                norm_layer=norm_layer,
                                downsample=None)
             self.layers.append(layer)
@@ -91,8 +113,16 @@ class SwinTransformer(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
+        """
+         Initialize weights for layer. This is called before training and can be overridden in subclasses
+
+         Args:
+                 m: layer to initialize weights
+        """
+        # This function is used to compute the normalization of a linear layer.
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
+            # If m is a linear linear linear model and its bias is not None it is initialized with 0.
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
@@ -101,128 +131,174 @@ class SwinTransformer(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
+        """
+         No weight decay. This is a dictionary of key / value pairs that can be used to set the embed parameters of the network.
+
+
+         Returns: 
+                 A dictionary of key / value pairs that can be used to set the embed parameters of the network
+        """
         return {'absolute_pos_embed'}
 
     @torch.jit.ignore
     def no_weight_decay_keywords(self):
+        """
+         Keywords to be added to the keyword dictionary. This is a dictionary of keywords that should not be added to the keyword dictionary but are used to determine the weight decay of the model.
+
+
+         Returns: 
+                 A dictionary of keywords to be added to the keyword dictionary
+        """
         return {'relative_position_bias_table'}
 
 
 class PyramidFeatures(nn.Module):
-    def __init__(self, config, img_size = 224, in_channels=3):
+    def __init__(self, config, img_size=224, in_channels=3):
         super().__init__()
-        
+
+        # Load Pre-trained Swin-Transformer with weights
+
         model_path = config.swin_pretrained_path
-        self.swin_transformer = SwinTransformer(img_size,in_chans = 3)
-        checkpoint = torch.load(model_path, map_location=torch.device(device))['model']
+        self.swin_transformer = SwinTransformer(img_size, in_chans=3)
+        checkpoint = torch.load(
+            model_path, map_location=torch.device(device))['model']
         unexpected = ["patch_embed.proj.weight", "patch_embed.proj.bias", "patch_embed.norm.weight", "patch_embed.norm.bias",
-                     "head.weight", "head.bias", "layers.0.downsample.norm.weight", "layers.0.downsample.norm.bias",
-                     "layers.0.downsample.reduction.weight", "layers.1.downsample.norm.weight", "layers.1.downsample.norm.bias",
-                     "layers.1.downsample.reduction.weight", "layers.2.downsample.norm.weight", "layers.2.downsample.norm.bias",
-                     "layers.2.downsample.reduction.weight", "norm.weight", "norm.bias"]
-
-        
-        resnet = eval(f"torchvision.models.{config.cnn_backbone}(pretrained={config.resnet_pretrained})")
+                      "head.weight", "head.bias", "layers.0.downsample.norm.weight", "layers.0.downsample.norm.bias",
+                      "layers.0.downsample.reduction.weight", "layers.1.downsample.norm.weight", "layers.1.downsample.norm.bias",
+                      "layers.1.downsample.reduction.weight", "layers.2.downsample.norm.weight", "layers.2.downsample.norm.bias",
+                      "layers.2.downsample.reduction.weight", "norm.weight", "norm.bias"]
+        # Loading preTrained Resnet Backbone Upto 7th layer for feature extraction
+        resnet = eval(
+            f"torchvision.models.{config.cnn_backbone}(pretrained={config.resnet_pretrained})")
         self.resnet_layers = nn.ModuleList(resnet.children())[:7]
-        
-        self.p1_ch = nn.Conv2d(config.cnn_pyramid_fm[0], config.swin_pyramid_fm[0] , kernel_size = 1)
-        self.p1_pm = PatchMerging((config.image_size // config.patch_size, config.image_size // config.patch_size), config.swin_pyramid_fm[0])
-        self.p1_pm.state_dict()['reduction.weight'][:]= checkpoint["layers.0.downsample.reduction.weight"]
-        self.p1_pm.state_dict()['norm.weight'][:]= checkpoint["layers.0.downsample.norm.weight"]
-        self.p1_pm.state_dict()['norm.bias'][:]= checkpoint["layers.0.downsample.norm.bias"]        
+
+        # Setting Up Convolution and Patch merging for 3 Levels
+
+        # Level 1
+        self.p1_ch = nn.Conv2d(
+            config.cnn_pyramid_fm[0], config.swin_pyramid_fm[0], kernel_size=1)
+        self.p1_pm = PatchMerging((config.image_size // config.patch_size,
+                                  config.image_size // config.patch_size), config.swin_pyramid_fm[0])
+        self.p1_pm.state_dict()[
+            'reduction.weight'][:] = checkpoint["layers.0.downsample.reduction.weight"]
+        self.p1_pm.state_dict()[
+            'norm.weight'][:] = checkpoint["layers.0.downsample.norm.weight"]
+        self.p1_pm.state_dict()[
+            'norm.bias'][:] = checkpoint["layers.0.downsample.norm.bias"]
         self.norm_1 = nn.LayerNorm(config.swin_pyramid_fm[0])
-        self.avgpool_1 = nn.AdaptiveAvgPool1d(1) 
+        self.avgpool_1 = nn.AdaptiveAvgPool1d(1)
 
+        # Level 2
         self.p2 = self.resnet_layers[5]
-        self.p2_ch = nn.Conv2d(config.cnn_pyramid_fm[1], config.swin_pyramid_fm[1] , kernel_size = 1)
-        self.p2_pm = PatchMerging((config.image_size // config.patch_size // 2, config.image_size // config.patch_size // 2), config.swin_pyramid_fm[1])
-        self.p2_pm.state_dict()['reduction.weight'][:]= checkpoint["layers.1.downsample.reduction.weight"]
-        self.p2_pm.state_dict()['norm.weight'][:]= checkpoint["layers.1.downsample.norm.weight"]
-        self.p2_pm.state_dict()['norm.bias'][:]= checkpoint["layers.1.downsample.norm.bias"]           
-        
+        self.p2_ch = nn.Conv2d(
+            config.cnn_pyramid_fm[1], config.swin_pyramid_fm[1], kernel_size=1)
+        self.p2_pm = PatchMerging((config.image_size // config.patch_size // 2,
+                                  config.image_size // config.patch_size // 2), config.swin_pyramid_fm[1])
+        self.p2_pm.state_dict()[
+            'reduction.weight'][:] = checkpoint["layers.1.downsample.reduction.weight"]
+        self.p2_pm.state_dict()[
+            'norm.weight'][:] = checkpoint["layers.1.downsample.norm.weight"]
+        self.p2_pm.state_dict()[
+            'norm.bias'][:] = checkpoint["layers.1.downsample.norm.bias"]
+
+        # Level 3
         self.p3 = self.resnet_layers[6]
-        self.p3_ch = nn.Conv2d(config.cnn_pyramid_fm[2] , config.swin_pyramid_fm[2] , kernel_size =  1)  
+        self.p3_ch = nn.Conv2d(
+            config.cnn_pyramid_fm[2], config.swin_pyramid_fm[2], kernel_size=1)
         self.norm_2 = nn.LayerNorm(config.swin_pyramid_fm[2])
-        self.avgpool_2 = nn.AdaptiveAvgPool1d(1)    
+        self.avgpool_2 = nn.AdaptiveAvgPool1d(1)
 
-
+    # Loading weights into Swin Transformer
         for key in list(checkpoint.keys()):
             if key in unexpected or 'layers.3' in key:
                 del checkpoint[key]
         self.swin_transformer.load_state_dict(checkpoint)
 
-
     def forward(self, x):
-        
-        for i in range(5):
-            x = self.resnet_layers[i](x) 
 
-        # Level 1
+        # X[batch_size, in_channels, height, width]
+        # Process X through first 5 layers of ResNet
+        # Out Feature Map X
+        for i in range(5):
+            x = self.resnet_layers[i](x)
+
+        # Level 1 Feature Extraction
+        # Conv2d -> Rearrange[b (h w) c] -> SwinTransformer -> Norm[swin_fm[0]] -> AdaptiveAvgPool -> rearrange[b 1 c] -> patch_merge
         fm1 = x
         fm1_ch = self.p1_ch(x)
-        fm1_reshaped = Rearrange('b c h w -> b (h w) c')(fm1_ch)               
+        fm1_reshaped = Rearrange('b c h w -> b (h w) c')(fm1_ch)
         sw1 = self.swin_transformer.layers[0](fm1_reshaped)
-        sw1_skipped = fm1_reshaped  + sw1
-        norm1 = self.norm_1(sw1_skipped) 
+        sw1_skipped = fm1_reshaped + sw1
+        norm1 = self.norm_1(sw1_skipped)
         sw1_CLS = self.avgpool_1(norm1.transpose(1, 2))
-        sw1_CLS_reshaped = Rearrange('b c 1 -> b 1 c')(sw1_CLS) 
+        sw1_CLS_reshaped = Rearrange('b c 1 -> b 1 c')(sw1_CLS)
         fm1_sw1 = self.p1_pm(sw1_skipped)
-        
-        # Level 2
+
+        # Level 2 Feature Extraction
         fm1_sw2 = self.swin_transformer.layers[1](fm1_sw1)
         fm2 = self.p2(fm1)
         fm2_ch = self.p2_ch(fm2)
-        fm2_reshaped = Rearrange('b c h w -> b (h w) c')(fm2_ch) 
-        fm2_sw2_skipped = fm2_reshaped  + fm1_sw2
+        fm2_reshaped = Rearrange('b c h w -> b (h w) c')(fm2_ch)
+        fm2_sw2_skipped = fm2_reshaped + fm1_sw2
         fm2_sw2 = self.p2_pm(fm2_sw2_skipped)
-    
-        # Level 3
+
+        # Level 3 Feature Extraction
         fm2_sw3 = self.swin_transformer.layers[2](fm2_sw2)
         fm3 = self.p3(fm2)
         fm3_ch = self.p3_ch(fm3)
-        fm3_reshaped = Rearrange('b c h w -> b (h w) c')(fm3_ch) 
-        fm3_sw3_skipped = fm3_reshaped  + fm2_sw3
-        norm2 = self.norm_2(fm3_sw3_skipped) 
+        fm3_reshaped = Rearrange('b c h w -> b (h w) c')(fm3_ch)
+        fm3_sw3_skipped = fm3_reshaped + fm2_sw3
+        norm2 = self.norm_2(fm3_sw3_skipped)
         sw3_CLS = self.avgpool_2(norm2.transpose(1, 2))
-        sw3_CLS_reshaped = Rearrange('b c 1 -> b 1 c')(sw3_CLS) 
+        sw3_CLS_reshaped = Rearrange('b c 1 -> b 1 c')(sw3_CLS)
 
         return [torch.cat((sw1_CLS_reshaped, sw1_skipped), dim=1), torch.cat((sw3_CLS_reshaped, fm3_sw3_skipped), dim=1)]
 
 # DLF Module
+
+
+# The `All2Cross` class in Python defines a neural network module for multi-scale processing with
+# cross positional embeddings and multi-scale blocks.
 class All2Cross(nn.Module):
-    def __init__(self, config, img_size = 224 , in_chans=3, embed_dim=(96, 384), norm_layer=nn.LayerNorm):
+    def __init__(self, config, img_size=224, in_chans=3, embed_dim=(96, 384), norm_layer=nn.LayerNorm):
         super().__init__()
         self.cross_pos_embed = config.cross_pos_embed
-        self.pyramid = PyramidFeatures(config=config, img_size= img_size, in_channels=in_chans)
-        
-        n_p1 = (config.image_size // config.patch_size     ) ** 2  # default: 3136 
-        n_p2 = (config.image_size // config.patch_size // 4) ** 2  # default: 196 
+        self.pyramid = PyramidFeatures(
+            config=config, img_size=img_size, in_channels=in_chans)
+
+        n_p1 = (config.image_size // config.patch_size) ** 2  # default: 3136
+        n_p2 = (config.image_size // config.patch_size //
+                4) ** 2  # default: 196
         num_patches = (n_p1, n_p2)
         self.num_branches = 2
-        
-        self.pos_embed = nn.ParameterList([nn.Parameter(torch.zeros(1, 1 + num_patches[i], embed_dim[i])) for i in range(self.num_branches)])
-        
+
+        self.pos_embed = nn.ParameterList([nn.Parameter(torch.zeros(
+            1, 1 + num_patches[i], embed_dim[i])) for i in range(self.num_branches)])
+
         total_depth = sum([sum(x[-2:]) for x in config.depth])
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, total_depth)]  # stochastic depth decay rule
+        # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(
+            0, config.drop_path_rate, total_depth)]
         dpr_ptr = 0
         self.blocks = nn.ModuleList()
         for idx, block_config in enumerate(config.depth):
             curr_depth = max(block_config[:-1]) + block_config[-1]
             dpr_ = dpr[dpr_ptr:dpr_ptr + curr_depth]
-            blk = MultiScaleBlock(embed_dim, num_patches, block_config, num_heads=config.num_heads, mlp_ratio=config.mlp_ratio,
-                                  qkv_bias=config.qkv_bias, qk_scale=config.qk_scale, drop=config.drop_rate, 
+            blk = MultiScaleBlock(embed_dim, num_patches, block_config, num_heads=config.num_heads,        mlp_ratio=config.mlp_ratio,
+                                  qkv_bias=config.qkv_bias, qk_scale=config.qk_scale, drop=config.drop_rate,
                                   attn_drop=config.attn_drop_rate, drop_path=dpr_, norm_layer=norm_layer)
             dpr_ptr += curr_depth
             self.blocks.append(blk)
 
-        self.norm = nn.ModuleList([norm_layer(embed_dim[i]) for i in range(self.num_branches)])
+        self.norm = nn.ModuleList([norm_layer(embed_dim[i])
+                                  for i in range(self.num_branches)])
 
         for i in range(self.num_branches):
             if self.pos_embed[i].requires_grad:
                 trunc_normal_(self.pos_embed[i], std=.02)
 
         self.apply(self._init_weights)
-    
+
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
@@ -243,8 +319,8 @@ class All2Cross(nn.Module):
         xs = self.pyramid(x)
 
         if self.cross_pos_embed:
-          for i in range(self.num_branches):
-            xs[i] += self.pos_embed[i]
+            for i in range(self.num_branches):
+                xs[i] += self.pos_embed[i]
 
         for blk in self.blocks:
             xs = blk(xs)
