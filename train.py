@@ -50,7 +50,7 @@ parser.add_argument('--z_spacing', type=int,
 args = parser.parse_args()
 
 args.output_dir = f'{args.output_dir}/{args.model_name}'
-os.makedirs(args.output_dir, exist_ok=True)
+os.makedirs(args.output_dir, exist_ok=False)
 
 
 if __name__ == "__main__":
