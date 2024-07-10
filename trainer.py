@@ -122,19 +122,17 @@ def trainer(args, model, snapshot_path):
     max_epoch = args.max_epochs
     checkpoint_path = get_latest_checkpoint(
         snap_path=snapshot_path, model_name=args.model_name)
+    logging.info(
+        f"latest checkpoint path :{checkpoint_path} from snap_path :{snapshot_path} and model name : {args.model_name}")
 
-    try:
-        if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path)
-            model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            start_epoch = checkpoint['epoch']
-            iter_num = checkpoint['iter_num']
-            logging.info(
-                f"Loaded checkpoint from epoch {start_epoch} with iter_num {iter_num}")
-
-    except:
-        pass
+    if os.path.exists(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch']
+        iter_num = checkpoint['iter_num']
+        logging.info(
+            f"Loaded checkpoint from epoch {start_epoch} with iter_num {iter_num}")
 
     max_iterations = args.max_epochs * len(trainloader)
     logging.info("{} iterations per epoch. {} max iterations ".format(

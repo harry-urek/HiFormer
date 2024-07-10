@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import SimpleITK as sitk
@@ -697,16 +698,32 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_s
 
 
 def get_latest_checkpoint(snap_path, model_name):
-    path_pattern = re.compile(rf"{re.escape(model_name)}_epoch_(\d+)\.pth")
+    path_pattern = re.compile(
+        rf"checkpoint_epoch_(\d+)_iter_(\d+)\.pth")
     max_epoch = -1
+    max_iter = -1
     current_checkpoint = None
+
+    logging.info(f"Looking for checkpoints in: {snap_path}")
+
+    # List files in the directory
+    try:
+        files = os.listdir(snap_path)
+        logging.info(f"Files in directory: {files}")
+    except FileNotFoundError:
+        logging.error(f"Directory not found: {snap_path}")
+        return None
 
     for filename in os.listdir(snap_path):
         match = path_pattern.match(filename)
         if match:
             epoch = int(match.group(1))
-            if epoch > max_epoch:
+            iter_num = int(match.group(2))
+            logging.info(
+                f"Found checkpoint: {filename}, epoch: {epoch}, iter: {iter_num}")
+            if epoch > max_epoch or (epoch == max_epoch and iter_num > max_iter):
                 max_epoch = epoch
+                max_iter = iter_num
                 current_checkpoint = os.path.join(snap_path, filename)
 
     return current_checkpoint
