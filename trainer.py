@@ -193,7 +193,7 @@ def trainer(args, model, snapshot_path):
             filename = f'{args.model_name}_epoch_{epoch_num}.pth'
             save_mode_path = os.path.join(snapshot_path, filename)
             save_checkpoint(epoch=epoch_num, iter_num=iter_num, model=model,
-                            optimizer=optimizer, path=snapshot_path)
+                            optimizer=optimizer, snapshot_path=snapshot_path)
             # torch.save(model.state_dict(), save_mode_path)
             logging.info(f"save model to {save_mode_path}")
 
@@ -206,6 +206,7 @@ def trainer(args, model, snapshot_path):
             hd95_.append(mean_hd95)
             model.train()
 
+        # Last Run
         if epoch_num >= max_epoch - 1:
             filename = f'{args.model_name}_epoch_{epoch_num}.pth'
             save_mode_path = os.path.join(snapshot_path, filename)

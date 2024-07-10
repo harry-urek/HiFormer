@@ -712,11 +712,18 @@ def get_latest_checkpoint(snap_path, model_name):
     return current_checkpoint
 
 
-def save_checkpoint(epoch, iter_num, model, optimizer, path):
+def save_checkpoint(epoch, iter_num, model, optimizer, snapshot_path):
+    if not os.path.exists(snapshot_path):
+        os.makedirs(snapshot_path)
+
+    # Create a full file path for the checkpoint file
+    filename = f'checkpoint_epoch_{epoch}_iter_{iter_num}.pth'
+    file_path = os.path.join(snapshot_path, filename)
+
     checkpoint = {
         'epoch': epoch,
         'iter_num': iter_num,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict()
     }
-    torch.save(checkpoint, path)
+    torch.save(checkpoint, file_path)
